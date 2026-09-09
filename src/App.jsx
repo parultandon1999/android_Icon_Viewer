@@ -901,7 +901,6 @@ export default function App() {
       const deltaY = clientY - lastPanTouchRef.current.y;
       setPanOffset(prev => ({ x: prev.x + deltaX, y: prev.y + deltaY }));
       lastPanTouchRef.current = { x: clientX, y: clientY };
-      return;
     }
 
     const relX = ((clientX - rect.left) / rect.width) * 24;
