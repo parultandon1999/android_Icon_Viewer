@@ -63,8 +63,7 @@ import {
   WifiOff,
   HelpCircle,
   ExternalLink,
-  Power
-} from 'lucide-react';
+} from 'masculine-icons';
 
 class TacticalAudioEngine {
   constructor() {
