@@ -1,21 +1,31 @@
 {
   "short_name": "TacticalCAD",
-  "name": "Tactical Icon Studio",
+  "name": "CAD-MK8 Tactical Icon Studio",
+  "description": "Professional SVG icon design and customization tool with military-inspired interface",
   "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
     {
       "src": "/icon-192.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any maskable"
     },
     {
       "src": "/icon-512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
   "start_url": "/",
+  "scope": "/",
   "background_color": "#050608",
   "theme_color": "#090B0E",
   "display": "standalone",
-  "orientation": "portrait"
+  "orientation": "portrait",
+  "categories": ["utilities", "productivity", "graphics"]
 }

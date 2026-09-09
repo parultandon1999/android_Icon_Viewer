@@ -62,8 +62,9 @@ import {
   ShieldAlert,
   WifiOff,
   HelpCircle,
-  ExternalLink
-} from 'masculine-icons';
+  ExternalLink,
+  Power
+} from 'lucide-react';
 
 class TacticalAudioEngine {
   constructor() {
@@ -127,6 +128,10 @@ class TacticalAudioEngine {
       osc.start();
       osc.stop(this.ctx.currentTime + 0.06);
     } catch (e) {}
+  }
+
+  playBootTone(freq = 440) {
+    this.playTone(freq, 0.05, 'triangle', 0.01);
   }
 
   playPurge() {
@@ -261,6 +266,14 @@ const AI_PROMPT_CHIPS = [
   'Kinetic Railgun'
 ];
 
+const BOOT_LOG_STEPS = [
+  { text: 'MOUNTING VECTOR CAD KERNEL [MK8]', pct: 15, tone: 440 },
+  { text: 'CALIBRATING 24x24 SUB-PIXEL GRIDS', pct: 35, tone: 580 },
+  { text: 'INITIALIZING SYNTHETIC AUDIO & HAPTICS', pct: 60, tone: 720 },
+  { text: 'WARMING GEMINI NEURAL GATEWAY LINK', pct: 85, tone: 960 },
+  { text: 'CAD-MK8 OPERATIONAL // SYSTEMS ENGAGED', pct: 100, tone: 1200 }
+];
+
 // Enhanced Multi-Stage Diagnostic Parser with Error Categorization
 const parseCodeToSvgPayload = (rawCode, accentColor = '#FF3344', dualColorMode = false) => {
   if (!rawCode || typeof rawCode !== 'string' || !rawCode.trim()) {
@@ -330,7 +343,6 @@ const parseCodeToSvgPayload = (rawCode, accentColor = '#FF3344', dualColorMode =
     }
 
     if (!svgElement) {
-      // Check if naked paths/lines exist without root <svg>
       const hasNakedVectors = /<(path|circle|line|rect|polyline|polygon)[\s>]/i.test(cleanCode);
       return {
         isValid: false,
@@ -481,6 +493,16 @@ const parseCodeToSvgPayload = (rawCode, accentColor = '#FF3344', dualColorMode =
 };
 
 export default function App() {
+  // Splash & Boot Sequence Engine State
+  const [isBooting, setIsBooting] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('cad_disable_boot') !== 'true';
+    }
+    return true;
+  });
+  const [bootProgress, setBootProgress] = useState(0);
+  const [bootLogIndex, setBootLogIndex] = useState(0);
+
   // Navigation & Core Environment
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [activeTab, setActiveTab] = useState('canvas'); // 'canvas' | 'matrix' | 'synth' | 'telemetry' | 'deploy' | 'code'
@@ -516,6 +538,12 @@ export default function App() {
       return localStorage.getItem('cad_show_keylines') !== 'false';
     }
     return true;
+  });
+  const [disableBootOnLaunch, setDisableBootOnLaunch] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('cad_disable_boot') === 'true';
+    }
+    return false;
   });
 
   // Test Connection Feedback inside Settings
@@ -600,6 +628,46 @@ export default function App() {
   const downloadCanvasRef = useRef(null);
   const canvasMountRef = useRef(null);
 
+  // Splash Screen Orchestration Timer
+  useEffect(() => {
+    if (!isBooting) return;
+
+    let currentStep = 0;
+    const intervalTime = 380; // Total ~1.9s boot duration
+
+    const bootTimer = setInterval(() => {
+      if (currentStep < BOOT_LOG_STEPS.length) {
+        setBootLogIndex(currentStep);
+        setBootProgress(BOOT_LOG_STEPS[currentStep].pct);
+        audioEngine.playBootTone(BOOT_LOG_STEPS[currentStep].tone);
+        triggerHaptic(10, hapticsEnabled);
+        currentStep++;
+      } else {
+        clearInterval(bootTimer);
+        setTimeout(() => {
+          setIsBooting(false);
+          audioEngine.playLock();
+          triggerHaptic([15, 30, 15], hapticsEnabled);
+        }, 300);
+      }
+    }, intervalTime);
+
+    return () => clearInterval(bootTimer);
+  }, [isBooting, hapticsEnabled]);
+
+  const handleBypassBoot = () => {
+    audioEngine.playClick();
+    triggerHaptic(15, hapticsEnabled);
+    setIsBooting(false);
+  };
+
+  const handleReplayBoot = () => {
+    setBootProgress(0);
+    setBootLogIndex(0);
+    setIsBooting(true);
+    setIsSettingsOpen(false);
+  };
+
   // Sync settings changes to localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -608,9 +676,10 @@ export default function App() {
       localStorage.setItem('cad_haptics_enabled', hapticsEnabled ? 'true' : 'false');
       localStorage.setItem('cad_auto_repair_paste', autoRepairOnPaste ? 'true' : 'false');
       localStorage.setItem('cad_show_keylines', showKeylinesDefault ? 'true' : 'false');
+      localStorage.setItem('cad_disable_boot', disableBootOnLaunch ? 'true' : 'false');
       localStorage.setItem('cad_snapshots_vault', JSON.stringify(snapshots));
     }
-  }, [apiKey, soundMuted, hapticsEnabled, autoRepairOnPaste, showKeylinesDefault, snapshots]);
+  }, [apiKey, soundMuted, hapticsEnabled, autoRepairOnPaste, showKeylinesDefault, disableBootOnLaunch, snapshots]);
 
   useEffect(() => {
     const updateTime = () => {
@@ -721,7 +790,6 @@ export default function App() {
     if (typeof process !== 'undefined' && process.env?.REACT_APP_GEMINI_API_KEY) {
       return process.env.REACT_APP_GEMINI_API_KEY;
     }
-    // Embedded Canvas fallback if available
     return "";
   }, [apiKey]);
 
@@ -883,7 +951,6 @@ export default function App() {
     try {
       let candidate = code.trim();
 
-      // Check if it's plain text without tags: wrap in default vector path
       if (!candidate.includes('<') && !candidate.includes('>')) {
         candidate = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">\n  <!-- Repaired from plain text -->\n  <circle cx="12" cy="12" r="9" />\n  <path d="M12 7v5l3 3" />\n</svg>`;
       }
@@ -895,13 +962,11 @@ export default function App() {
         candidate += '</svg>';
       }
 
-      // Close open path and circle tags if unclosed
       candidate = candidate.replace(/<path([^>]*?[^\/])>/gi, '<path$1 />');
       candidate = candidate.replace(/<circle([^>]*?[^\/])>/gi, '<circle$1 />');
       candidate = candidate.replace(/<line([^>]*?[^\/])>/gi, '<line$1 />');
       candidate = candidate.replace(/<rect([^>]*?[^\/])>/gi, '<rect$1 />');
 
-      // Strip dirty inline scripts and comments
       candidate = candidate.replace(/<script[\s\S]*?<\/script>/gi, '');
       candidate = candidate.replace(/<!--[\s\S]*?-->/g, '');
       candidate = candidate.replace(/\s+/g, ' ').replace(/>\s+</g, '><').trim();
@@ -953,7 +1018,6 @@ export default function App() {
     triggerToast(`RECALLED: SLOT-0${slot.id}`);
   };
 
-  // Resilient Gemini AI Vector Synthesizer with Status Diagnostic Handling
   const handleGenerateIconWithAI = async (customPrompt) => {
     const targetPrompt = customPrompt || aiPrompt;
     if (!targetPrompt.trim()) return;
@@ -1017,7 +1081,6 @@ Generate ONLY valid, ultra-clean, minimal 24x24 SVG:
       const match = generatedRaw.match(/<svg[\s\S]*?<\/svg>/i);
       const cleanSvg = match ? match[0] : generatedRaw.replace(/```xml|```svg|```/gi, '').trim();
 
-      // Test SVG validity
       const testParse = parseCodeToSvgPayload(cleanSvg);
       if (!testParse.isValid) {
         throw new Error(`AI generated invalid vector syntax: ${testParse.errorMessage}`);
@@ -1359,6 +1422,7 @@ export const ${compName} = ({ size = ${iconSize}, primaryColor = "${activeColor}
       setSoundMuted(false);
       setHapticsEnabled(true);
       setAutoRepairOnPaste(true);
+      setDisableBootOnLaunch(false);
       playFx('purge');
       triggerToast('STUDIO RECALIBRATED');
     }
@@ -1463,6 +1527,121 @@ export const ${compName} = ({ size = ${iconSize}, primaryColor = "${activeColor}
     >
       <canvas ref={downloadCanvasRef} className="hidden" />
       <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
+
+      {/* ========================================================= */}
+      {/* TACTICAL MIL-SPEC SPLASH SCREEN // BOOT SEQUENCE OVERLAY  */}
+      {/* ========================================================= */}
+      {isBooting && (
+        <div
+          onClick={handleBypassBoot}
+          className="fixed inset-0 z-50 flex flex-col justify-between p-4 sm:p-6 bg-[#050608] text-zinc-100 cursor-pointer overflow-hidden font-mono"
+        >
+          {/* Subtle Ambient Grid & Radar Sweep */}
+          <div
+            className="absolute inset-0 pointer-events-none opacity-20"
+            style={{
+              backgroundImage: `
+                linear-gradient(to right, rgba(0, 229, 255, 0.15) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 229, 255, 0.15) 1px, transparent 1px)
+              `,
+              backgroundSize: '24px 24px'
+            }}
+          />
+          <div className="absolute inset-0 pointer-events-none shadow-[inset_0_0_120px_rgba(0,0,0,0.95)]" />
+
+          {/* Top Boot Telemetry Strip */}
+          <div className="relative z-10 flex justify-between items-center border-b border-zinc-800/80 pb-2 text-[8px] sm:text-[9px] text-zinc-500 uppercase tracking-wider">
+            <div className="flex items-center space-x-2">
+              <span className="w-2 h-2 bg-cyan-400 rounded-none animate-ping" />
+              <span className="font-black text-cyan-400">SYS_INIT // CAD-MK8</span>
+              <span className="text-zinc-600">|</span>
+              <span>REV. 8.4.1</span>
+            </div>
+            <div className="flex items-center space-x-3">
+              <span className="text-zinc-400 font-bold">{zuluTime || '00:00:00Z'}</span>
+              <span className="px-1.5 py-0.5 border border-cyan-500/40 bg-cyan-950/40 text-cyan-300 text-[7.5px] font-bold">
+                STANDBY
+              </span>
+            </div>
+          </div>
+
+          {/* Centerpiece: Tactical HUD Reticle & Calibrated Loading Bar */}
+          <div className="relative z-10 flex flex-col items-center justify-center my-auto space-y-6">
+            {/* Multi-Ring Rotating Radar HUD Target */}
+            <div className="relative w-36 h-36 flex items-center justify-center">
+              {/* Outer Dashed Ring */}
+              <div className="absolute inset-0 border border-dashed border-cyan-500/40 rounded-full animate-[spin_10s_linear_infinite]" />
+              
+              {/* Inner Reverse Ring */}
+              <div className="absolute inset-3 border border-zinc-700/80 rounded-full animate-[spin_6s_linear_infinite_reverse]" />
+              
+              {/* Central Fixed Compass Diamond */}
+              <div className="absolute inset-8 border border-cyan-400/30 rotate-45" />
+
+              {/* Crosshair Hairlines */}
+              <div className="absolute w-full h-px bg-cyan-500/30" />
+              <div className="absolute h-full w-px bg-cyan-500/30" />
+
+              {/* Center Glowing Icon Emblem */}
+              <div className="relative w-12 h-12 flex items-center justify-center bg-cyan-950/50 border border-cyan-400/80 shadow-[0_0_24px_rgba(0,229,255,0.4)]">
+                <Crosshair className="w-7 h-7 text-cyan-400 animate-pulse" />
+              </div>
+
+              {/* Corner Calibrated Indices */}
+              <span className="absolute -top-1 -left-1 text-[7.5px] text-zinc-600 font-bold">┌ 0,0</span>
+              <span className="absolute -top-1 -right-1 text-[7.5px] text-zinc-600 font-bold">24,0 ┐</span>
+              <span className="absolute -bottom-1 -left-1 text-[7.5px] text-zinc-600 font-bold">└ 0,24</span>
+              <span className="absolute -bottom-1 -right-1 text-[7.5px] text-zinc-600 font-bold">24,24 ┘</span>
+            </div>
+
+            {/* Tactical Identity Headline */}
+            <div className="text-center space-y-1">
+              <h1 className="text-sm sm:text-base font-black tracking-[0.25em] text-zinc-100 uppercase">
+                TACTICAL ICON STUDIO
+              </h1>
+              <p className="text-[8.5px] text-cyan-400/80 tracking-widest uppercase">
+                MIL-SPEC VECTOR CAD & GEMINI SYNTHESIS ENGINE
+              </p>
+            </div>
+
+            {/* Telemetry Progress Ladder */}
+            <div className="w-full max-w-xs space-y-2">
+              {/* Segmented Mil-Spec Progress Bar */}
+              <div className="h-2 w-full bg-zinc-950 border border-zinc-800 p-0.5 flex">
+                <div
+                  style={{ width: `${bootProgress}%` }}
+                  className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 transition-all duration-300 shadow-[0_0_10px_rgba(0,229,255,0.8)]"
+                />
+              </div>
+
+              {/* Progress Value & Status Log */}
+              <div className="flex justify-between items-center text-[8px] sm:text-[8.5px]">
+                <span className="text-cyan-300 font-bold tracking-tight truncate max-w-[210px]">
+                  {BOOT_LOG_STEPS[bootLogIndex]?.text || 'ENGAGING ENGINE...'}
+                </span>
+                <span className="text-amber-400 font-mono font-bold tabular-nums pl-2">
+                  [{String(bootProgress).padStart(3, '0')}%]
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Interactive Bypass Pill */}
+          <div className="relative z-10 flex justify-between items-center border-t border-zinc-800/80 pt-3 text-[7.5px] sm:text-[8px] text-zinc-500 uppercase">
+            <div className="flex items-center space-x-1.5">
+              <span className="w-1.5 h-1.5 bg-emerald-500 inline-block" />
+              <span>CORE ARCHITECTURE ONLINE</span>
+            </div>
+            <button
+              onClick={handleBypassBoot}
+              className="px-2.5 py-1 border border-zinc-700 bg-zinc-900/80 text-cyan-400 hover:text-white hover:border-cyan-400 transition active:scale-95 flex items-center space-x-1 font-bold"
+            >
+              <span>BYPASS SEQUENCE</span>
+              <ChevronRight className="w-2.5 h-2.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Military Command Strip Header */}
       <header
@@ -1709,7 +1888,6 @@ export const ${compName} = ({ size = ${iconSize}, primaryColor = "${activeColor}
                 }}
                 className={`relative flex items-center justify-center p-6 transition-all ${badgeClass || ''}`}
               >
-                {/* Tactical Chassis Corner Screws */}
                 {badgeStyle === 'hud-tile' && (
                   <>
                     <span className="absolute -top-1.5 -left-1.5 text-[8px] leading-none opacity-50">＋</span>
@@ -1719,7 +1897,6 @@ export const ${compName} = ({ size = ${iconSize}, primaryColor = "${activeColor}
                   </>
                 )}
 
-                {/* SVG Icon Output or Detailed Fault Diagnostic */}
                 {parsedData.isValid ? (
                   <div className={`relative ${getAnimationClass()}`}>
                     <svg
@@ -1772,7 +1949,6 @@ export const ${compName} = ({ size = ${iconSize}, primaryColor = "${activeColor}
                     ))}
                   </div>
                 ) : (
-                  /* High-Precision Tactical Fault Diagnosis Display */
                   <div className="p-3 border border-red-500/80 bg-red-950/60 backdrop-blur-md text-left max-w-[280px] shadow-2xl space-y-1.5">
                     <div className="flex items-center space-x-1.5 text-red-400">
                       <ShieldAlert className="w-3.5 h-3.5 flex-none animate-pulse" />
@@ -1871,7 +2047,7 @@ export const ${compName} = ({ size = ${iconSize}, primaryColor = "${activeColor}
                 isDarkMode ? 'bg-[#090B0E] border-zinc-800' : 'bg-white border-zinc-300'
               }`}
             >
-              {/* Stepped Knurled Sliders: Aperture & Caliber */}
+              {/* Sliders: Aperture & Caliber */}
               <div className="grid grid-cols-2 gap-2">
                 <div
                   className={`border p-2 ${
@@ -2364,7 +2540,6 @@ export const ${compName} = ({ size = ${iconSize}, primaryColor = "${activeColor}
               </button>
             </div>
 
-            {/* AI 4-Variation Cards */}
             {aiVariations.length > 0 && (
               <div className="space-y-1.5">
                 <span className="text-[8px] font-bold uppercase text-cyan-400">// AI VARIATION MATRIX</span>
@@ -2396,7 +2571,6 @@ export const ${compName} = ({ size = ${iconSize}, primaryColor = "${activeColor}
               </div>
             )}
 
-            {/* Diagnostic Meter Cards */}
             <div className="grid grid-cols-3 gap-1.5">
               <div className={`border p-2 text-center ${isDarkMode ? 'bg-[#090B0E] border-zinc-800' : 'bg-white border-zinc-300'}`}>
                 <p className="text-[7.5px] text-zinc-500 uppercase font-bold">BYTE PAYLOAD</p>
@@ -2417,7 +2591,6 @@ export const ${compName} = ({ size = ${iconSize}, primaryColor = "${activeColor}
               </div>
             </div>
 
-            {/* Element Composition */}
             <div className={`border p-2.5 space-y-1.5 ${isDarkMode ? 'bg-[#090B0E] border-zinc-800' : 'bg-white border-zinc-300'}`}>
               <div className="flex justify-between items-center text-[8px] font-bold uppercase text-zinc-500">
                 <span>ELEMENT COMPOSITION BREAKDOWN</span>
@@ -2443,7 +2616,6 @@ export const ${compName} = ({ size = ${iconSize}, primaryColor = "${activeColor}
               </div>
             </div>
 
-            {/* Component Identifier Name */}
             <div className={`border p-2.5 space-y-1 ${isDarkMode ? 'bg-[#090B0E] border-zinc-800' : 'bg-white border-zinc-300'}`}>
               <label className="text-[7.5px] text-zinc-500 uppercase font-bold block">COMPONENT IDENTIFIER</label>
               <input
@@ -2468,7 +2640,6 @@ export const ${compName} = ({ size = ${iconSize}, primaryColor = "${activeColor}
               <p className="text-[8.5px] text-zinc-500">Operational tests across tactical field instruments & watches</p>
             </div>
 
-            {/* Scenario 1: Garmin / Mil-Spec Tactical Smartwatch */}
             <div className={`border p-2.5 space-y-2 ${isDarkMode ? 'bg-[#090B0E] border-zinc-800' : 'bg-white border-zinc-300'}`}>
               <div className="flex justify-between items-center text-[7.5px] font-bold text-zinc-500 uppercase">
                 <span className="flex items-center space-x-1">
@@ -2504,7 +2675,6 @@ export const ${compName} = ({ size = ${iconSize}, primaryColor = "${activeColor}
               </div>
             </div>
 
-            {/* Scenario 2: Tactical Field Device HUD */}
             <div className={`border p-2.5 space-y-2 ${isDarkMode ? 'bg-[#090B0E] border-zinc-800' : 'bg-white border-zinc-300'}`}>
               <span className="text-[7.5px] text-zinc-500 tracking-wider uppercase font-bold block">
                 TACTICAL COMM TILE // OMEGA-6
@@ -2597,7 +2767,6 @@ export const ${compName} = ({ size = ${iconSize}, primaryColor = "${activeColor}
               ))}
             </div>
 
-            {/* High-Res Image Downloads */}
             <div className={`border p-2.5 space-y-1.5 ${isDarkMode ? 'bg-[#090B0E] border-zinc-800' : 'bg-white border-zinc-300'}`}>
               <h3 className="text-[9px] font-bold uppercase text-zinc-400">RASTER & VECTOR ASSETS</h3>
               <div className="grid grid-cols-3 gap-1.5">
@@ -2827,7 +2996,38 @@ export const ${compName} = ({ size = ${iconSize}, primaryColor = "${activeColor}
               </div>
             </div>
 
-            {/* SECTION 3: CAD DRAFTING DEFAULTS */}
+            {/* SECTION 3: BOOT SEQUENCE & LAUNCH BEHAVIOR */}
+            <div className={`border p-2.5 space-y-2 ${isDarkMode ? 'bg-black/50 border-zinc-800' : 'bg-zinc-50 border-zinc-300'}`}>
+              <span className="text-[8.5px] font-black uppercase text-zinc-400 block">SPLASH SCREEN & LAUNCH INITIALIZATION</span>
+
+              <div className="flex justify-between items-center text-[8px]">
+                <span className="text-zinc-300">SHOW BOOT SEQUENCE ON LAUNCH</span>
+                <button
+                  onClick={() => {
+                    const next = !disableBootOnLaunch;
+                    setDisableBootOnLaunch(next);
+                    playFx('click');
+                  }}
+                  className={`px-2 py-0.5 border text-[7.5px] font-bold ${
+                    !disableBootOnLaunch ? 'border-cyan-500 bg-cyan-500 text-black' : 'border-zinc-700 bg-zinc-800 text-zinc-400'
+                  }`}
+                >
+                  {!disableBootOnLaunch ? 'ALWAYS' : 'DISABLED'}
+                </button>
+              </div>
+
+              <div className="pt-1 flex justify-end">
+                <button
+                  onClick={handleReplayBoot}
+                  className="px-2.5 py-1 border border-cyan-500/80 bg-cyan-950/30 text-cyan-400 text-[7.5px] font-bold uppercase flex items-center space-x-1 active:scale-95"
+                >
+                  <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                  <span>RE-RUN BOOT SEQUENCE</span>
+                </button>
+              </div>
+            </div>
+
+            {/* SECTION 4: CAD DRAFTING DEFAULTS */}
             <div className={`border p-2.5 space-y-2 ${isDarkMode ? 'bg-black/50 border-zinc-800' : 'bg-zinc-50 border-zinc-300'}`}>
               <span className="text-[8.5px] font-black uppercase text-zinc-400 block">DRAFTING ENGINE DEFAULTS</span>
 
@@ -2864,7 +3064,7 @@ export const ${compName} = ({ size = ${iconSize}, primaryColor = "${activeColor}
               </div>
             </div>
 
-            {/* SECTION 4: SYSTEM RECALIBRATION */}
+            {/* SECTION 5: SYSTEM RECALIBRATION */}
             <div className="pt-1 flex items-center justify-between">
               <button
                 onClick={handleFactoryReset}
