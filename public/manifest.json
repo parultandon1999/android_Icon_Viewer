@@ -1,11 +1,16 @@
 {
   "short_name": "TacticalCAD",
-  "name": "CAD-MK8 Tactical Icon Studio",
+  "name": "Tactical Icon Studio",
   "icons": [
     {
-      "src": "/vite.svg",
-      "type": "image/svg+xml",
-      "sizes": "192x192 512x512"
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
     }
   ],
   "start_url": "/",
