@@ -1,0 +1,16 @@
+{
+  "short_name": "TacticalCAD",
+  "name": "CAD-MK8 Tactical Icon Studio",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#050608",
+  "theme_color": "#090B0E",
+  "display": "standalone",
+  "orientation": "portrait"
+}
